@@ -16,11 +16,17 @@ esac
 sudo apt update
 sudo apt install -y curl tar
 
-# Get latest release version for zoxide
-ZOX_LATEST=$(curl -s https://api.github.com/repos/ajeetdsouza/zoxide/releases/latest \
-    | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
+# Function to fetch latest GitHub release tag
+get_latest_release() {
+    local repo="$1"
+    curl -s "https://api.github.com/repos/$repo/releases/latest" \
+        | grep '"tag_name":' | head -1 | cut -d '"' -f 4
+}
 
-# Install or update zoxide (Alpine/musl binary)
+# ------------------------------
+# Install or update zoxide
+# ------------------------------
+ZOX_LATEST=$(get_latest_release "ajeetdsouza/zoxide")
 if ! command -v zoxide >/dev/null 2>&1 || [ "$(zoxide --version | grep -oE 'v[0-9\.]+')" != "$ZOX_LATEST" ]; then
     echo "Installing/updating zoxide $ZOX_LATEST..."
     URL="https://github.com/ajeetdsouza/zoxide/releases/download/$ZOX_LATEST/zoxide-$ZOX_LATEST-$ARCH-unknown-linux-musl.tar.gz"
@@ -32,11 +38,10 @@ else
     echo "zoxide is already the latest ($ZOX_LATEST)"
 fi
 
-# Get latest release for fzf
-FZF_LATEST=$(curl -s https://api.github.com/repos/junegunn/fzf/releases/latest \
-    | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
-
+# ------------------------------
 # Install or update fzf
+# ------------------------------
+FZF_LATEST=$(get_latest_release "junegunn/fzf")
 if ! command -v fzf >/dev/null 2>&1 || [ "$(fzf --version | grep -oE '^[0-9\.]+')" != "$FZF_LATEST" ]; then
     echo "Installing/updating fzf $FZF_LATEST..."
     URL="https://github.com/junegunn/fzf/releases/download/$FZF_LATEST/fzf-$FZF_LATEST-$ARCH.tar.gz"
@@ -48,7 +53,9 @@ else
     echo "fzf is already the latest ($FZF_LATEST)"
 fi
 
+# ------------------------------
 # Configure all normal users
+# ------------------------------
 for user in $(cut -f1 -d: /etc/passwd); do
     UID=$(id -u "$user")
     [ "$UID" -lt 1000 ] && continue  # skip system users
