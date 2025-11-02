@@ -21,26 +21,19 @@ retry() {
 echo "=== Detecting package manager ==="
 if command -v apt &>/dev/null; then
     PKG_MANAGER="apt"
-    INSTALL_CMD="sudo apt update && sudo apt install -y"
 elif command -v dnf &>/dev/null; then
     PKG_MANAGER="dnf"
-    INSTALL_CMD="sudo dnf install -y"
 elif command -v pacman &>/dev/null; then
     PKG_MANAGER="pacman"
-    INSTALL_CMD="sudo pacman -Sy --noconfirm"
 elif command -v zypper &>/dev/null; then
     PKG_MANAGER="zypper"
-    INSTALL_CMD="sudo zypper install -y"
 else
-    echo "Unsupported Linux distribution. Please install curl, git, and Rust manually." >&2
+    echo "Unsupported Linux distribution." >&2
     exit 1
 fi
 echo "Detected package manager: $PKG_MANAGER"
 
-# --- Install basic tools ---
-$INSTALL_CMD curl git make gcc
-
-# --- Ask sudo once and keep session alive ---
+# --- Ask sudo once and keep alive ---
 if sudo -v; then
     echo "Sudo access granted, keeping session alive..."
     while true; do
@@ -49,12 +42,28 @@ if sudo -v; then
         kill -0 "$$" || exit
     done 2>/dev/null &
 else
-    echo "Sudo is required to install packages. Aborting."
+    echo "Sudo is required. Aborting."
     exit 1
 fi
 
+# --- Install basic packages per distro ---
+case $PKG_MANAGER in
+    apt)
+        sudo apt update
+        sudo apt install -y curl git make gcc libncurses5-dev libncursesw5-dev libssl-dev libbz2-dev libreadline-dev zlib1g-dev
+        ;;
+    dnf)
+        sudo dnf install -y curl git make gcc ncurses-devel openssl-devel bzip2 bzip2-devel readline-devel zlib-devel
+        ;;
+    pacman)
+        sudo pacman -Sy --noconfirm curl git make gcc ncurses openssl bzip2 zlib
+        ;;
+    zypper)
+        sudo zypper install -y curl git make gcc ncurses-devel libopenssl-devel bzip2 bzip2-devel readline-devel zlib-devel
+        ;;
+esac
+
 # --- Clean previous installations ---
-echo "Cleaning previous installations..."
 [ -d "$HOME/.fzf" ] && rm -rf "$HOME/.fzf"
 [ -d "$HOME/.powerlevel10k" ] && rm -rf "$HOME/.powerlevel10k"
 command -v zoxide &>/dev/null && cargo uninstall zoxide || true
@@ -81,12 +90,6 @@ COMP_RESULT=$?
 
 if [[ ! $(command -v zsh) ]] || [[ $COMP_RESULT -ne 1 ]]; then
     echo "Installing latest Zsh from source..."
-    case $PKG_MANAGER in
-        apt) $INSTALL_CMD libncurses5-dev libncursesw5-dev libssl-dev libbz2-dev libreadline-dev zlib1g-dev ;;
-        dnf) $INSTALL_CMD ncurses-devel openssl-devel bzip2 bzip2-devel readline-devel zlib-devel ;;
-        pacman) $INSTALL_CMD ncurses openssl bzip2 zlib ;;
-        zypper) $INSTALL_CMD ncurses-devel libopenssl-devel bzip2 bzip2-devel readline-devel zlib-devel ;;
-    esac
     tmpdir=$(mktemp -d)
     git clone https://github.com/zsh-users/zsh.git "$tmpdir/zsh"
     cd "$tmpdir/zsh"
@@ -103,9 +106,8 @@ fi
 if [ ! -d "$HOME/.powerlevel10k" ]; then
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME/.powerlevel10k"
 fi
-if ! grep -q "powerlevel10k.zsh-theme" ~/.zshrc 2>/dev/null; then
+grep -q "powerlevel10k.zsh-theme" ~/.zshrc 2>/dev/null || \
     echo "source $HOME/.powerlevel10k/powerlevel10k.zsh-theme" >> ~/.zshrc
-fi
 
 # --- Install Rust + zoxide ---
 if ! command -v cargo &>/dev/null; then
@@ -142,11 +144,8 @@ if command -v zoxide &>/dev/null; then
             else
                 z "$*" || { echo "Error: z command failed" >&2; return 1; }
             fi
-        elif [[ "$ans" =~ ^[Nn]$ ]] || [[ -z "$ans" ]]; then
-            _original_cd "$@" || { echo "Error: cd failed" >&2; return 1; }
         else
-            echo "Error: invalid input '$ans', aborting cd." >&2
-            return 1
+            _original_cd "$@" || { echo "Error: cd failed" >&2; return 1; }
         fi
     }
 
@@ -179,6 +178,3 @@ EOF
 done
 
 echo "=== Installation complete! Restart your shell to see Powerlevel10k, zoxide, and fzf features ==="
-echo "Tips:"
-echo "  - Type 'fcd' or press Ctrl-J to fuzzy jump directories."
-echo "  - Type 'fssh' to fuzzy-select an SSH host."
