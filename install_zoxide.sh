@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# Ask for sudo once
 sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
+# Detect OS and architecture
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="x86_64" ;;
@@ -12,6 +14,10 @@ case $ARCH in
 esac
 
 OS=$(uname | tr '[:upper:]' '[:lower:]')
+if [[ "$OS" != "linux" && "$OS" != "darwin" ]]; then
+    echo "Unsupported OS: $OS"
+    exit 1
+fi
 
 # Minimal dependencies
 if command -v apt >/dev/null; then
@@ -29,45 +35,41 @@ else
     exit 1
 fi
 
-get_latest_version() {
-    curl -s "https://api.github.com/repos/$1/releases/latest" \
-    | grep '"tag_name":' | head -1 | cut -d '"' -f 4
-}
-
-get_release_url() {
-    curl -s "https://api.github.com/repos/$1/releases/latest" \
-    | grep browser_download_url \
-    | grep "$2" \
-    | cut -d '"' -f 4
-}
-
-install_if_needed() {
-    local name=$1
+# Helper to install GitHub latest release
+install_github_binary() {
+    local repo=$1
     local binary=$2
-    local repo=$3
+    local os=$3
+    local arch=$4
 
-    local latest=$(get_latest_version "$repo")
-    local installed=$($binary --version 2>/dev/null || echo "")
-
-    if [[ "$installed" != "$latest" ]]; then
-        echo "Installing/updating $name to $latest..."
-        sudo rm -f "/usr/local/bin/$binary"
-        rm -rf "$HOME/.$binary"
-        local url=$(get_release_url "$repo" "${OS}_${ARCH}")
-        curl -L "$url" -o /tmp/$binary.tar.gz
-        sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
-        rm /tmp/$binary.tar.gz
-    else
-        echo "$name is already the latest version ($installed)"
+    LATEST=$(curl -s "https://api.github.com/repos/$repo/releases/latest" | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
+    if [ -z "$LATEST" ]; then
+        echo "Failed to fetch latest release for $repo"
+        exit 1
     fi
+
+    # Remove old binary
+    sudo rm -f "/usr/local/bin/$binary"
+    rm -rf "$HOME/.$binary"
+
+    # Build download URL
+    URL="https://github.com/$repo/releases/download/$LATEST/$binary-$LATEST-$os-$arch.tar.gz"
+    echo "Downloading $binary $LATEST..."
+    curl -L "$URL" -o /tmp/$binary.tar.gz
+
+    # Extract binary
+    sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
+    rm /tmp/$binary.tar.gz
 }
 
-install_if_needed "zoxide" "zoxide" "ajeetdsouza/zoxide"
-install_if_needed "fzf" "fzf" "junegunn/fzf"
+# Install latest zoxide and fzf
+install_github_binary "ajeetdsouza/zoxide" "zoxide" "$OS" "$ARCH"
+install_github_binary "junegunn/fzf" "fzf" "$OS" "$ARCH"
 
+# Configure all users
 for user in $(cut -f1 -d: /etc/passwd); do
     UID=$(id -u "$user")
-    [ "$UID" -lt 1000 ] && continue
+    [ "$UID" -lt 1000 ] && continue  # skip system users
 
     HOME_DIR=$(eval echo "~$user")
     SHELL_PATH=$(getent passwd "$user" | cut -d: -f7)
