@@ -1,124 +1,63 @@
 #!/usr/bin/env bash
 set -e
 
-# -----------------------------
 # Request sudo upfront
-# -----------------------------
 if [ "$EUID" -ne 0 ]; then
     echo "This script requires sudo privileges."
-    sudo -v  # Ask for password once
+    sudo -v
 fi
-
-# Keep sudo alive until script finishes
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-echo "=== System-wide installer: tmux + TPM + fzf + zoxide ==="
+echo "=== System-wide installer: tmux + TPM + fzf + zoxide default options ==="
 
-# -----------------------------
-# Detect package manager
-# -----------------------------
+# Install packages
 if command -v apt &>/dev/null; then
-    PKG_MANAGER="apt"
-    UPDATE_CMD="apt update -y"
-    INSTALL_CMD="apt install -y"
+    sudo apt update -y
+    sudo apt install -y tmux fzf zoxide git curl
 elif command -v dnf &>/dev/null; then
-    PKG_MANAGER="dnf"
-    UPDATE_CMD="dnf -y update"
-    INSTALL_CMD="dnf -y install"
+    sudo dnf -y update
+    sudo dnf -y install tmux fzf zoxide git curl
 elif command -v pacman &>/dev/null; then
-    PKG_MANAGER="pacman"
-    UPDATE_CMD="pacman -Sy --noconfirm"
-    INSTALL_CMD="pacman -S --noconfirm"
+    sudo pacman -Sy --noconfirm tmux fzf zoxide git curl
 else
-    echo "❌ No supported package manager found (apt, dnf, pacman)."
+    echo "❌ No supported package manager found."
     exit 1
 fi
 
-echo "Detected: $PKG_MANAGER"
-echo "=== Updating system package list ==="
-sudo bash -c "$UPDATE_CMD"
-
-# -----------------------------
-# Install packages
-# -----------------------------
-echo "=== Installing tmux, fzf, zoxide, git, curl ==="
-sudo bash -c "$INSTALL_CMD tmux fzf zoxide git curl"
-
-# -----------------------------
 # Clean TPM and reinstall
-# -----------------------------
 TPM_DIR="/usr/share/tmux/plugins/tpm"
-echo "=== Installing Tmux Plugin Manager (TPM) ==="
-if [ -d "$TPM_DIR" ]; then
-    sudo rm -rf "$TPM_DIR"
-    echo "🧹 Removed old TPM at $TPM_DIR"
-fi
+[ -d "$TPM_DIR" ] && sudo rm -rf "$TPM_DIR"
 sudo mkdir -p /usr/share/tmux/plugins
 sudo git clone --depth=1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
 sudo chmod -R 755 "$TPM_DIR"
-echo "✔ Fresh TPM installed at $TPM_DIR"
 
-# -----------------------------
-# Write clean global tmux.conf
-# -----------------------------
-GLOBAL_TMUX_CONF="/etc/tmux.conf"
-echo "=== Writing clean global tmux.conf ==="
-sudo tee "$GLOBAL_TMUX_CONF" >/dev/null <<'EOF'
-# ===============================================================
-# System-wide tmux configuration with TPM support
-# ===============================================================
+# Global tmux.conf
+sudo tee /etc/tmux.conf >/dev/null <<'EOF'
 set -g mouse on
 set -g history-limit 10000
 setw -g mode-keys vi
-
 set -g @plugin 'tmux-plugins/tpm'
 set -g @plugin 'tmux-plugins/tmux-sensible'
-
 run-shell /usr/share/tmux/plugins/tpm/tpm
 EOF
-sudo chmod 644 "$GLOBAL_TMUX_CONF"
 
 # -----------------------------
-# Interactive zoxide options
+# Auto-enable all 5 zoxide options
 # -----------------------------
-while true; do
-    echo
-    echo "=== zoxide system-wide setup ==="
-    read -rp "Enable auto-tracking of directories (--hook)? [y/n]: " ENABLE_HOOK
-    read -rp "Enable fuzzy search with fzf (--fzf)? [y/n]: " ENABLE_FZF
-    read -rp "Override normal cd with zoxide (--cmd cd)? [y/n]: " OVERRIDE_CD
-    read -rp "Set user-specific database location (ZO_DATA)? [y/n]: " SET_DB
+HOOK_OPTION="--hook"
+FZF_OPTION="--fzf"
+CMD_OPTION="--cmd cd"
+SET_DB=true
 
-    echo
-    echo "You selected:"
-    echo "  Auto-tracking (--hook): $ENABLE_HOOK"
-    echo "  Fuzzy search (--fzf): $ENABLE_FZF"
-    echo "  Override cd (--cmd cd): $OVERRIDE_CD"
-    echo "  User-specific database (ZO_DATA): $SET_DB"
-    echo
+echo
+echo "All zoxide options are automatically enabled:"
+echo "  • Auto-tracking (--hook)"
+echo "  • Fuzzy search (--fzf)"
+echo "  • Override cd (--cmd cd)"
+echo "  • User-specific database (ZO_DATA)"
+echo
 
-    read -rp "Apply these options? [y/n/r for restart]: " CONFIRM
-    case "$CONFIRM" in
-        [Yy]* ) break ;;
-        [Rr]* ) echo "Restarting option selection..."; continue ;;
-        [Nn]* ) echo "Exiting without applying zoxide options."; exit 0 ;;
-        * ) echo "Please answer y, n, or r." ;;
-    esac
-done
-
-# -----------------------------
-# Determine zoxide flags
-# -----------------------------
-HOOK_OPTION=""
-if [[ "$ENABLE_HOOK" =~ ^[Yy]$ ]]; then HOOK_OPTION="--hook"; fi
-FZF_OPTION=""
-if [[ "$ENABLE_FZF" =~ ^[Yy]$ ]]; then FZF_OPTION="--fzf"; fi
-CMD_OPTION=""
-if [[ "$OVERRIDE_CD" =~ ^[Yy]$ ]]; then CMD_OPTION="--cmd cd"; else CMD_OPTION="--cmd z"; fi
-
-# -----------------------------
 # Apply system-wide integration
-# -----------------------------
 GLOBAL_BASHRC="/etc/bash.bashrc"
 GLOBAL_ZSHRC="/etc/zsh/zshrc"
 SETUP_BLOCK="
@@ -137,39 +76,19 @@ for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
     if [ -f "$rc" ]; then
         sudo sed -i '/system-wide zoxide setup/,+10d' "$rc" || true
         echo "$SETUP_BLOCK" | sudo tee -a "$rc" >/dev/null
-        echo "✔ Applied zoxide integration to $rc"
     fi
 done
 
-# -----------------------------
 # User-specific ZO_DATA
-# -----------------------------
-if [[ "$SET_DB" =~ ^[Yy]$ ]]; then
+if [[ "$SET_DB" = true ]]; then
     USER_DB="$HOME/.local/share/zoxide/db.zo"
-    if [ -f "$USER_DB" ]; then
-        rm -f "$USER_DB"
-        echo "🧹 Removed old user ZO_DATA at $USER_DB"
-    fi
+    [ -f "$USER_DB" ] && rm -f "$USER_DB"
     for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        if [ -f "$rc" ]; then
-            grep -q "export ZO_DATA" "$rc" || echo "export ZO_DATA=\"\$HOME/.local/share/zoxide/db.zo\"" >> "$rc"
-        fi
+        [ -f "$rc" ] && grep -q "export ZO_DATA" "$rc" || echo "export ZO_DATA=\"\$HOME/.local/share/zoxide/db.zo\"" >> "$rc"
     done
-    echo "✔ User-specific ZO_DATA set at $USER_DB"
 fi
 
-# -----------------------------
-# Complete
-# -----------------------------
-echo
-echo "=== ✅ Clean Installation Complete ==="
-echo "Installed:"
-echo "  • tmux + TPM"
-echo "  • fzf"
-echo "  • zoxide with selected options"
-echo
-echo "💡 Restart your terminal or run:"
-echo "   source /etc/bash.bashrc   # for bash"
-echo "   source /etc/zsh/zshrc     # for zsh"
-echo
-echo "🧩 To enable tmux plugins, start tmux and press Ctrl+b then I (capital i)"
+echo "=== ✅ Default zoxide options applied ==="
+echo "Restart your terminal or run:"
+echo "  source /etc/bash.bashrc"
+echo "  source /etc/zsh/zshrc"
