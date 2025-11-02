@@ -10,7 +10,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-echo "=== System-wide installer: tmux + TPM + fzf + latest zoxide ==="
+echo "=== System-wide installer: tmux + TPM + fzf + latest zoxide with auto-fuzzy ==="
 
 # -----------------------------
 # Detect package manager
@@ -44,18 +44,21 @@ sudo mkdir -p /usr/share/tmux/plugins
 sudo git clone --depth=1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
 sudo chmod -R 755 "$TPM_DIR"
 
-# Global tmux.conf
+# Minimal global tmux.conf
 sudo tee /etc/tmux.conf >/dev/null <<'EOF'
 set -g mouse on
 set -g history-limit 10000
 setw -g mode-keys vi
+
+# TPM plugins
+set -g @tpm_silent true
 set -g @plugin 'tmux-plugins/tpm'
 set -g @plugin 'tmux-plugins/tmux-sensible'
 run-shell /usr/share/tmux/plugins/tpm/tpm
 EOF
 
 # -----------------------------
-# Zoxide default options
+# Zoxide options
 # -----------------------------
 HOOK_OPTION="--hook"
 CMD_OPTION="--cmd cd"
@@ -63,7 +66,7 @@ SET_DB=true
 ENABLE_FZF=false
 
 # Check if zoxide supports --fzf
-if zoxide init bash --help 2>&1 | grep -q -- '--fzf'; then
+if zoxide init zsh --help 2>&1 | grep -q -- '--fzf'; then
     ENABLE_FZF=true
 fi
 if $ENABLE_FZF; then
@@ -73,10 +76,10 @@ else
 fi
 
 echo
-echo "All zoxide options are automatically enabled:"
+echo "Zoxide options enabled:"
 echo "  • Auto-tracking (--hook)"
 echo "  • Override cd (--cmd cd)"
-[ $ENABLE_FZF = true ] && echo "  • Fuzzy search (--fzf)"
+[ $ENABLE_FZF = true ] && echo "  • Interactive fuzzy search (--fzf)"
 echo "  • User-specific database (ZO_DATA)"
 echo
 
@@ -87,9 +90,7 @@ GLOBAL_BASHRC="/etc/bash.bashrc"
 GLOBAL_ZSHRC="/etc/zsh/zshrc"
 
 for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
-    if [ -f "$rc" ]; then
-        sudo sed -i '/system-wide zoxide setup/,+10d' "$rc" || true
-    fi
+    [ -f "$rc" ] && sudo sed -i '/system-wide zoxide setup/,+15d' "$rc" || true
 done
 
 # -----------------------------
@@ -101,6 +102,8 @@ if command -v zoxide &>/dev/null; then
     if [ -n \"\$BASH_VERSION\" ]; then
         eval \"\$(zoxide init bash $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
     elif [ -n \"\$ZSH_VERSION\" ]; then
+        # Source fzf keybindings if available
+        [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
         eval \"\$(zoxide init zsh $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
     fi
 fi
@@ -108,9 +111,7 @@ fi
 "
 
 for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
-    if [ -f "$rc" ]; then
-        echo "$SETUP_BLOCK" | sudo tee -a "$rc" >/dev/null
-    fi
+    [ -f "$rc" ] && echo "$SETUP_BLOCK" | sudo tee -a "$rc" >/dev/null
 done
 
 # -----------------------------
@@ -126,7 +127,7 @@ if [[ "$SET_DB" = true ]]; then
 fi
 
 # -----------------------------
-# Reload shell configuration for current shell
+# Reload shell configuration
 # -----------------------------
 CURRENT_SHELL=$(basename "$SHELL")
 case "$CURRENT_SHELL" in
@@ -148,8 +149,12 @@ else
 fi
 
 echo
-echo "=== ✅ Clean installation complete ==="
+echo "=== ✅ Installation complete ==="
 echo "Restart your terminal or run the appropriate source command for your shell:"
 echo "  source /etc/bash.bashrc  # bash"
 echo "  source /etc/zsh/zshrc    # zsh"
-echo "To enable tmux plugins, start tmux and press Ctrl+b then I (capital i)"
+echo "Usage:"
+echo "  z <partial>  → auto fuzzy jump with interactive window"
+echo "  cd <path>    → also overridden by zoxide"
+echo "  tmux         → plugins installed and silent"
+echo "Press Ctrl+b then I in tmux to install TPM plugins if needed"
