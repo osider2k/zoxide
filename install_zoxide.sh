@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# Detect architecture
+sudo -v
+while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="x86_64" ;;
@@ -9,53 +11,111 @@ case $ARCH in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Detect OS
 OS=$(uname | tr '[:upper:]' '[:lower:]')
 
-# Install dependencies
-install_dependencies() {
-    if command -v apt >/dev/null; then
-        sudo apt update && sudo apt install -y curl tar git
-    elif command -v dnf >/dev/null; then
-        sudo dnf install -y curl tar git
-    elif command -v yum >/dev/null; then
-        sudo yum install -y curl tar git
-    elif command -v pacman >/dev/null; then
-        sudo pacman -Syu --noconfirm curl tar git
-    elif command -v zypper >/dev/null; then
-        sudo zypper install -y curl tar git
+# Minimal dependencies
+if command -v apt >/dev/null; then
+    sudo apt update && sudo apt install -y curl tar
+elif command -v dnf >/dev/null; then
+    sudo dnf install -y curl tar
+elif command -v yum >/dev/null; then
+    sudo yum install -y curl tar
+elif command -v pacman >/dev/null; then
+    sudo pacman -Syu --noconfirm curl tar
+elif command -v zypper >/dev/null; then
+    sudo zypper install -y curl tar
+else
+    echo "Please install curl and tar manually."
+    exit 1
+fi
+
+get_latest_version() {
+    curl -s "https://api.github.com/repos/$1/releases/latest" \
+    | grep '"tag_name":' | head -1 | cut -d '"' -f 4
+}
+
+get_release_url() {
+    curl -s "https://api.github.com/repos/$1/releases/latest" \
+    | grep browser_download_url \
+    | grep "$2" \
+    | cut -d '"' -f 4
+}
+
+install_if_needed() {
+    local name=$1
+    local binary=$2
+    local repo=$3
+
+    local latest=$(get_latest_version "$repo")
+    local installed=$($binary --version 2>/dev/null || echo "")
+
+    if [[ "$installed" != "$latest" ]]; then
+        echo "Installing/updating $name to $latest..."
+        sudo rm -f "/usr/local/bin/$binary"
+        rm -rf "$HOME/.$binary"
+        local url=$(get_release_url "$repo" "${OS}_${ARCH}")
+        curl -L "$url" -o /tmp/$binary.tar.gz
+        sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
+        rm /tmp/$binary.tar.gz
     else
-        echo "Please install curl, tar, git manually."
+        echo "$name is already the latest version ($installed)"
     fi
 }
 
-install_dependencies
+install_if_needed "zoxide" "zoxide" "ajeetdsouza/zoxide"
+install_if_needed "fzf" "fzf" "junegunn/fzf"
 
-# Install latest zoxide
-if ! command -v zoxide >/dev/null; then
-    echo "Installing latest zoxide..."
-    ZOX_RELEASE=$(curl -s https://api.github.com/repos/ajeetdsouza/zoxide/releases/latest | grep browser_download_url | grep "${OS}_${ARCH}" | cut -d '"' -f 4)
-    curl -L "$ZOX_RELEASE" -o /tmp/zoxide.tar.gz
-    sudo tar -C /usr/local/bin -xzf /tmp/zoxide.tar.gz
-    rm /tmp/zoxide.tar.gz
-else
-    echo "zoxide already installed"
-fi
+for user in $(cut -f1 -d: /etc/passwd); do
+    UID=$(id -u "$user")
+    [ "$UID" -lt 1000 ] && continue
 
-# Install latest fzf
-if ! command -v fzf >/dev/null; then
-    echo "Installing latest fzf..."
-    FZF_RELEASE=$(curl -s https://api.github.com/repos/junegunn/fzf/releases/latest | grep browser_download_url | grep "${OS}_${ARCH}" | cut -d '"' -f 4)
-    curl -L "$FZF_RELEASE" -o /tmp/fzf.tar.gz
-    tar -xzf /tmp/fzf.tar.gz -C /tmp
-    sudo mv /tmp/fzf /usr/local/bin/
-    rm /tmp/fzf.tar.gz
-else
-    echo "fzf already installed"
-fi
+    HOME_DIR=$(eval echo "~$user")
+    SHELL_PATH=$(getent passwd "$user" | cut -d: -f7)
+    case "$SHELL_PATH" in
+        */bash) INIT="$HOME_DIR/.bashrc" ;;
+        */zsh) INIT="$HOME_DIR/.zshrc" ;;
+        */fish) INIT="$HOME_DIR/.config/fish/config.fish" ;;
+        *) INIT="$HOME_DIR/.bashrc" ;;
+    esac
 
-echo "Installation complete!"
-echo 'Add the following to your shell config:'
-echo '  eval "$(zoxide init bash)"  # for bash'
-echo '  eval "$(zoxide init zsh)"   # for zsh'
-echo '  eval "$(zoxide init fish)"  # for fish'
+    # zoxide init
+    if ! grep -q "zoxide init" "$INIT" 2>/dev/null; then
+        if [[ "$SHELL_PATH" == */fish ]]; then
+            echo 'zoxide init fish | source' >> "$INIT"
+        else
+            echo 'eval "$(zoxide init '"${SHELL_PATH##*/}"')" ' >> "$INIT"
+        fi
+    fi
+
+    # fzf key bindings + Ctrl+R
+    if [[ "$SHELL_PATH" == */bash || "$SHELL_PATH" == */zsh ]]; then
+        if ! grep -q "fzf key bindings" "$INIT" 2>/dev/null; then
+            echo 'if [ -f /usr/local/bin/fzf ]; then' >> "$INIT"
+            echo '  source /usr/local/bin/fzf 2>/dev/null' >> "$INIT"
+            echo '  export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"' >> "$INIT"
+            echo '  bind '"'"'"\C-r": "\C-a\C-k$(history | fzf --tac --no-sort --preview '\''echo {}'\'')\e\C-e\C-y\C-m"'"'" >> "$INIT"
+            echo 'fi' >> "$INIT"
+        fi
+    fi
+
+    # interactive-only cd using zoxide + fzf
+    if ! grep -q "cd() {" "$INIT" 2>/dev/null; then
+        echo '' >> "$INIT"
+        echo '# Override cd for interactive fuzzy selection only' >> "$INIT"
+        echo 'cd() {' >> "$INIT"
+        echo '  if [ "$#" -eq 0 ]; then' >> "$INIT"
+        echo '    builtin cd ~' >> "$INIT"
+        echo '  else' >> "$INIT"
+        echo '    target=$(zoxide query "$1" --interactive 2>/dev/null)' >> "$INIT"
+        echo '    if [ -n "$target" ]; then' >> "$INIT"
+        echo '      builtin cd "$target"' >> "$INIT"
+        echo '    else' >> "$INIT"
+        echo '      echo "No selection, staying in current directory"' >> "$INIT"
+        echo '    fi' >> "$INIT"
+        echo '  fi' >> "$INIT"
+        echo '}' >> "$INIT"
+    fi
+done
+
+echo "✅ zoxide + fzf with Ctrl+T, Ctrl+R, and interactive-only cd installed for all users."
+echo "Users may need to log out/in to apply changes."
