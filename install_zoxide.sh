@@ -60,10 +60,10 @@ SET_DB=true
 
 echo
 echo "All zoxide options are automatically enabled:"
-echo "  ✅ Auto-tracking (--hook)"
-echo "  ✅ Fuzzy search (--fzf)"
-echo "  ✅ Override cd (--cmd cd)"
-echo "  ✅ User-specific database (ZO_DATA)"
+echo "  • Auto-tracking (--hook)"
+echo "  • Fuzzy search (--fzf)"
+echo "  • Override cd (--cmd cd)"
+echo "  • User-specific database (ZO_DATA)"
 echo
 
 # -----------------------------
@@ -128,7 +128,7 @@ esac
 # Verify cd override
 # -----------------------------
 if type cd | grep -q 'zoxide'; then
-    echo "✅ cd is successfully overridden by zoxide"
+    echo "✔ cd is successfully overridden by zoxide"
 else
     echo "⚠ cd is still the shell builtin. Reload your shell to apply."
 fi
