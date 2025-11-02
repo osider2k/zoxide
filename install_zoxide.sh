@@ -5,7 +5,6 @@ set -e
 sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-# Detect architecture
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="x86_64" ;;
@@ -19,13 +18,12 @@ OS=linux
 sudo apt update
 sudo apt install -y curl tar
 
-# Helper to install GitHub latest release if missing or outdated
+# Function to install/update GitHub binary if missing or outdated
 install_github_binary() {
     local repo=$1
     local binary=$2
-    local os=$3
-    local arch=$4
-    local check_version=$5   # optional: how to extract version from binary output
+    local url_pattern=$3    # e.g., Alpine binary name
+    local version_check=$4  # command to get installed version
 
     # Get latest release
     LATEST=$(curl -s "https://api.github.com/repos/$repo/releases/latest" \
@@ -35,16 +33,11 @@ install_github_binary() {
         exit 1
     fi
 
-    # Check if binary exists and is latest
+    # Check installed version
     if command -v $binary >/dev/null 2>&1; then
-        if [ -n "$check_version" ]; then
-            INSTALLED=$($check_version 2>/dev/null)
-            if [ "$INSTALLED" == "$LATEST" ]; then
-                echo "$binary is already the latest ($LATEST)"
-                return
-            fi
-        else
-            echo "$binary is already installed, skipping"
+        INSTALLED=$($version_check 2>/dev/null)
+        if [ "$INSTALLED" == "$LATEST" ]; then
+            echo "$binary is already the latest ($LATEST)"
             return
         fi
     fi
@@ -55,20 +48,23 @@ install_github_binary() {
     sudo rm -f "/usr/local/bin/$binary"
     rm -rf "$HOME/.$binary"
 
-    # Build download URL and fetch
-    URL="https://github.com/$repo/releases/download/$LATEST/$binary-$LATEST-$os-$arch.tar.gz"
+    # Download binary (Alpine/musl for zoxide)
+    URL=$(echo "$url_pattern" | sed "s/{{LATEST}}/$LATEST/; s/{{ARCH}}/$ARCH/")
     curl -L "$URL" -o /tmp/$binary.tar.gz
-
-    # Extract binary
     sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
     rm /tmp/$binary.tar.gz
 
     echo "$binary $LATEST installed."
 }
 
-# Install zoxide and fzf only if missing or outdated
-install_github_binary "ajeetdsouza/zoxide" "zoxide" "$OS" "$ARCH" "zoxide --version | grep -oE 'v[0-9\.]+'"
-install_github_binary "junegunn/fzf" "fzf" "$OS" "$ARCH" "fzf --version | grep -oE '^[0-9\.]+'"
+# Install zoxide (Alpine binary) and fzf
+install_github_binary "ajeetdsouza/zoxide" "zoxide" \
+    "https://github.com/ajeetdsouza/zoxide/releases/download/{{LATEST}}/zoxide-{{LATEST}}-{{ARCH}}-unknown-linux-musl.tar.gz" \
+    "zoxide --version | grep -oE 'v[0-9\.]+'"
+
+install_github_binary "junegunn/fzf" "fzf" \
+    "https://github.com/junegunn/fzf/releases/download/{{LATEST}}/fzf-{{LATEST}}-{{ARCH}}.tar.gz" \
+    "fzf --version | grep -oE '^[0-9\.]+'"
 
 # Configure all normal users
 for user in $(cut -f1 -d: /etc/passwd); do
