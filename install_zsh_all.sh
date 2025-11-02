@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-# Retry helper
+# --- Retry helper ---
 retry() {
     local -r -i max_attempts="$1"; shift
     local -r cmd=("$@")
@@ -37,10 +37,10 @@ else
 fi
 echo "Detected package manager: $PKG_MANAGER"
 
-# Ensure basic tools installed
+# --- Install basic tools ---
 $INSTALL_CMD curl git make gcc
 
-# --- Ask sudo once and keep alive ---
+# --- Ask sudo once and keep session alive ---
 if sudo -v; then
     echo "Sudo access granted, keeping session alive..."
     while true; do
@@ -53,15 +53,13 @@ else
     exit 1
 fi
 
-echo "=== Cleaning previous installations ==="
-FZF_DIR="$HOME/.fzf"
-[ -d "$FZF_DIR" ] && echo "Removing old fzf..." && rm -rf "$FZF_DIR"
-[ -d "$HOME/.powerlevel10k" ] && echo "Removing old Powerlevel10k..." && rm -rf "$HOME/.powerlevel10k"
-command -v zoxide &>/dev/null && echo "Removing old zoxide..." && cargo uninstall zoxide || true
+# --- Clean previous installations ---
+echo "Cleaning previous installations..."
+[ -d "$HOME/.fzf" ] && rm -rf "$HOME/.fzf"
+[ -d "$HOME/.powerlevel10k" ] && rm -rf "$HOME/.powerlevel10k"
+command -v zoxide &>/dev/null && cargo uninstall zoxide || true
 
-# -----------------------
-# Install latest Zsh
-# -----------------------
+# --- Install latest Zsh ---
 MIN_VERSION="5.9"
 INSTALLED_VERSION=$(zsh --version 2>/dev/null | awk '{print $2}' || echo "0")
 
@@ -101,45 +99,33 @@ if [[ ! $(command -v zsh) ]] || [[ $COMP_RESULT -ne 1 ]]; then
     rm -rf "$tmpdir"
 fi
 
-# -----------------------
-# Install Powerlevel10k
-# -----------------------
+# --- Install Powerlevel10k ---
 if [ ! -d "$HOME/.powerlevel10k" ]; then
-    echo "Installing Powerlevel10k..."
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$HOME/.powerlevel10k"
 fi
-
 if ! grep -q "powerlevel10k.zsh-theme" ~/.zshrc 2>/dev/null; then
     echo "source $HOME/.powerlevel10k/powerlevel10k.zsh-theme" >> ~/.zshrc
 fi
 
-# -----------------------
-# Install Rust + zoxide
-# -----------------------
+# --- Install Rust + zoxide ---
 if ! command -v cargo &>/dev/null; then
-    echo "Installing Rust..."
     retry 3 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
-
 retry 3 cargo install --force zoxide
 
-# -----------------------
-# Install fzf
-# -----------------------
-retry 3 git clone --depth 1 https://github.com/junegunn/fzf.git "$FZF_DIR"
-retry 3 "$FZF_DIR/install" --all --no-bash --no-fish
+# --- Install fzf ---
+retry 3 git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+retry 3 "$HOME/.fzf/install" --all --no-bash --no-fish
 
-# -----------------------
-# Setup shell configuration
-# -----------------------
+# --- Setup shell configuration ---
 for shell_rc in ~/.zshrc ~/.bashrc; do
     [ -f "$shell_rc" ] && cp "$shell_rc" "$shell_rc.backup.$(date +%Y%m%d%H%M%S)"
 done
 
 for shell_rc in ~/.zshrc ~/.bashrc; do
     cat << 'EOF' >> "$shell_rc"
-# ---- zoxide + fzf integration ----
+# zoxide + fzf integration
 if command -v zoxide &>/dev/null; then
     eval "$(zoxide init $(basename $SHELL))"
 
@@ -174,12 +160,8 @@ if command -v zoxide &>/dev/null; then
     }
 
     case $(basename $SHELL) in
-        zsh)
-            bindkey '^J' fcd
-            ;;
-        bash)
-            bind '"\C-j": "\C-u fcd\C-m"'
-            ;;
+        zsh) bindkey '^J' fcd ;;
+        bash) bind '"\C-j": "\C-u fcd\C-m"' ;;
     esac
 
     fssh() {
@@ -196,7 +178,7 @@ fi
 EOF
 done
 
-echo "=== Installation complete! Restart your shell to see Powerlevel10k and zoxide/fzf features. ==="
+echo "=== Installation complete! Restart your shell to see Powerlevel10k, zoxide, and fzf features ==="
 echo "Tips:"
-echo "  - Type 'fcd' or press Ctrl-J to fuzzy jump directories using zoxide and fzf."
-echo "  - Type 'fssh' to fuzzy-select an SSH host and connect."
+echo "  - Type 'fcd' or press Ctrl-J to fuzzy jump directories."
+echo "  - Type 'fssh' to fuzzy-select an SSH host."
