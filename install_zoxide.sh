@@ -10,26 +10,32 @@ if [ "$EUID" -ne 0 ]; then
 fi
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-echo "=== System-wide installer: tmux + TPM + fzf + zoxide default options ==="
+echo "=== System-wide installer: tmux + TPM + fzf + latest zoxide ==="
 
 # -----------------------------
 # Detect package manager
 # -----------------------------
 if command -v apt &>/dev/null; then
-    PKG_MANAGER="apt"
     sudo apt update -y
-    sudo apt install -y tmux fzf zoxide git curl
+    sudo apt install -y tmux fzf git curl
 elif command -v dnf &>/dev/null; then
-    PKG_MANAGER="dnf"
     sudo dnf -y update
-    sudo dnf -y install tmux fzf zoxide git curl
+    sudo dnf -y install tmux fzf git curl
 elif command -v pacman &>/dev/null; then
-    PKG_MANAGER="pacman"
-    sudo pacman -Sy --noconfirm tmux fzf zoxide git curl
+    sudo pacman -Sy --noconfirm tmux fzf git curl
 else
     echo "❌ No supported package manager found."
     exit 1
 fi
+
+# -----------------------------
+# Install latest zoxide from GitHub
+# -----------------------------
+echo "Installing latest zoxide..."
+curl -fsSL https://github.com/ajeetdsouza/zoxide/releases/latest/download/install.sh | bash
+
+# Ensure /usr/local/bin is in PATH
+export PATH="/usr/local/bin:$PATH"
 
 # -----------------------------
 # Clean TPM and reinstall
@@ -51,19 +57,17 @@ run-shell /usr/share/tmux/plugins/tpm/tpm
 EOF
 
 # -----------------------------
-# Auto-enable all 5 zoxide options
+# Zoxide default options (without --fzf)
 # -----------------------------
 HOOK_OPTION="--hook"
-FZF_OPTION="--fzf"
 CMD_OPTION="--cmd cd"
 SET_DB=true
 
 echo
 echo "All zoxide options are automatically enabled:"
-echo "  ✅ Auto-tracking (--hook)"
-echo "  ✅ Fuzzy search (--fzf)"
-echo "  ✅ Override cd (--cmd cd)"
-echo "  ✅ User-specific database (ZO_DATA)"
+echo "  • Auto-tracking (--hook)"
+echo "  • Override cd (--cmd cd)"
+echo "  • User-specific database (ZO_DATA)"
 echo
 
 # -----------------------------
@@ -85,9 +89,9 @@ SETUP_BLOCK="
 # >>> system-wide zoxide setup >>>
 if command -v zoxide &>/dev/null; then
     if [ -n \"\$BASH_VERSION\" ]; then
-        eval \"\$(zoxide init bash $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
+        eval \"\$(zoxide init bash $HOOK_OPTION $CMD_OPTION)\"
     elif [ -n \"\$ZSH_VERSION\" ]; then
-        eval \"\$(zoxide init zsh $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
+        eval \"\$(zoxide init zsh $HOOK_OPTION $CMD_OPTION)\"
     fi
 fi
 # <<< system-wide zoxide setup <<<
@@ -117,10 +121,10 @@ fi
 CURRENT_SHELL=$(basename "$SHELL")
 case "$CURRENT_SHELL" in
     bash)
-        source /etc/bash.bashrc
+        source /etc/bash.bashrc || true
         ;;
     zsh)
-        source /etc/zsh/zshrc
+        source /etc/zsh/zshrc || true
         ;;
 esac
 
@@ -130,7 +134,7 @@ esac
 if type cd | grep -q 'zoxide'; then
     echo "✔ cd is successfully overridden by zoxide"
 else
-    echo "⚠ cd is still the shell builtin. Reload your shell to apply."
+    echo "⚠ cd is still the shell builtin. Restart your shell to apply."
 fi
 
 echo
