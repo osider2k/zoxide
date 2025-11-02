@@ -1,112 +1,129 @@
 #!/usr/bin/env bash
+# ================================================================
+# System-wide installer for tmux, fzf, zoxide, and tmux plugin manager (TPM)
+# Works with Debian/Ubuntu, Fedora/RHEL, and Arch/Manjaro
+# ================================================================
+
 set -e
 
-# Ask sudo once
-sudo -v
-while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+echo "=== Detecting package manager ==="
 
-ARCH=$(uname -m)
-case $ARCH in
-    x86_64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="aarch64" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-# Install minimal dependencies
-sudo apt update
-sudo apt install -y curl tar
-
-# Function to fetch latest GitHub release tag
-get_latest_release() {
-    local repo="$1"
-    curl -s "https://api.github.com/repos/$repo/releases/latest" \
-        | grep '"tag_name":' | head -1 | cut -d '"' -f 4
-}
-
-# ------------------------------
-# Install or update zoxide (stable glibc)
-# ------------------------------
-ZOX_LATEST=$(get_latest_release "ajeetdsouza/zoxide")
-if ! command -v zoxide >/dev/null 2>&1 || [ "$(zoxide --version | grep -oE 'v[0-9\.]+')" != "$ZOX_LATEST" ]; then
-    echo "Installing/updating zoxide $ZOX_LATEST..."
-    URL="https://github.com/ajeetdsouza/zoxide/releases/download/$ZOX_LATEST/zoxide-$ZOX_LATEST-$ARCH-unknown-linux-gnu.tar.gz"
-    curl -L "$URL" -o /tmp/zoxide.tar.gz
-    sudo tar -C /usr/local/bin -xzf /tmp/zoxide.tar.gz
-    rm /tmp/zoxide.tar.gz
-    echo "zoxide $ZOX_LATEST installed."
+if command -v apt &>/dev/null; then
+    PKG_MANAGER="apt"
+    UPDATE_CMD="apt update -y"
+    INSTALL_CMD="apt install -y"
+elif command -v dnf &>/dev/null; then
+    PKG_MANAGER="dnf"
+    UPDATE_CMD="dnf -y update"
+    INSTALL_CMD="dnf -y install"
+elif command -v pacman &>/dev/null; then
+    PKG_MANAGER="pacman"
+    UPDATE_CMD="pacman -Sy --noconfirm"
+    INSTALL_CMD="pacman -S --noconfirm"
 else
-    echo "zoxide is already the latest ($ZOX_LATEST)"
+    echo "❌ No supported package manager found (apt, dnf, pacman)."
+    exit 1
 fi
 
-# ------------------------------
-# Install or update fzf
-# ------------------------------
-FZF_LATEST=$(get_latest_release "junegunn/fzf")
-if ! command -v fzf >/dev/null 2>&1 || [ "$(fzf --version | grep -oE '^[0-9\.]+')" != "$FZF_LATEST" ]; then
-    echo "Installing/updating fzf $FZF_LATEST..."
-    URL="https://github.com/junegunn/fzf/releases/download/$FZF_LATEST/fzf-$FZF_LATEST-$ARCH.tar.gz"
-    curl -L "$URL" -o /tmp/fzf.tar.gz
-    sudo tar -C /usr/local/bin -xzf /tmp/fzf.tar.gz
-    rm /tmp/fzf.tar.gz
-    echo "fzf $FZF_LATEST installed."
+echo "Detected: $PKG_MANAGER"
+echo "=== Updating system package list ==="
+sudo bash -c "$UPDATE_CMD"
+
+echo "=== Installing tmux, fzf, and zoxide system-wide ==="
+sudo bash -c "$INSTALL_CMD tmux fzf zoxide git curl"
+
+# ---------------------------------------------------------------
+# Install tmux plugin manager (TPM)
+# ---------------------------------------------------------------
+TPM_DIR="/usr/share/tmux/plugins/tpm"
+
+echo "=== Installing Tmux Plugin Manager (TPM) ==="
+
+if [ ! -d "$TPM_DIR" ]; then
+    sudo mkdir -p /usr/share/tmux/plugins
+    sudo git clone https://github.com/tmux-plugins/tpm "$TPM_DIR"
+    sudo chmod -R 755 "$TPM_DIR"
+    echo "✔ Installed TPM to $TPM_DIR"
 else
-    echo "fzf is already the latest ($FZF_LATEST)"
+    echo "↺ TPM already installed at $TPM_DIR"
 fi
 
-# ------------------------------
-# Configure all normal users
-# ------------------------------
-for user in $(cut -f1 -d: /etc/passwd); do
-    UID=$(id -u "$user")
-    [ "$UID" -lt 1000 ] && continue  # skip system users
+# ---------------------------------------------------------------
+# Add global tmux configuration with TPM support
+# ---------------------------------------------------------------
+GLOBAL_TMUX_CONF="/etc/tmux.conf"
 
-    HOME_DIR=$(eval echo "~$user")
-    SHELL_PATH=$(getent passwd "$user" | cut -d: -f7)
-    case "$SHELL_PATH" in
-        */bash) INIT="$HOME_DIR/.bashrc" ;;
-        */zsh) INIT="$HOME_DIR/.zshrc" ;;
-        */fish) INIT="$HOME_DIR/.config/fish/config.fish" ;;
-        *) INIT="$HOME_DIR/.bashrc" ;;
-    esac
+if [ ! -f "$GLOBAL_TMUX_CONF" ]; then
+    sudo tee "$GLOBAL_TMUX_CONF" >/dev/null <<'EOF'
+# ===============================================================
+# System-wide tmux configuration with TPM support
+# ===============================================================
 
-    # zoxide init
-    if ! grep -q "zoxide init" "$INIT" 2>/dev/null; then
-        if [[ "$SHELL_PATH" == */fish ]]; then
-            echo 'zoxide init fish | source' >> "$INIT"
+# Use TPM (Tmux Plugin Manager)
+set -g @plugin 'tmux-plugins/tpm'
+set -g @plugin 'tmux-plugins/tmux-sensible'
+
+# Initialize TPM (keep this line at the bottom)
+run-shell /usr/share/tmux/plugins/tpm/tpm
+EOF
+    echo "✔ Created global tmux config with TPM enabled at $GLOBAL_TMUX_CONF"
+else
+    echo "↺ Global tmux.conf already exists; skipped creation."
+fi
+
+# ---------------------------------------------------------------
+# Setup global shell integration for zoxide + fzf
+# ---------------------------------------------------------------
+GLOBAL_BASHRC="/etc/bash.bashrc"
+GLOBAL_ZSHRC="/etc/zsh/zshrc"
+
+SETUP_BLOCK="
+# >>> system-wide zoxide + fzf setup >>>
+if command -v zoxide &>/dev/null; then
+    if [ -n \"\$BASH_VERSION\" ]; then
+        eval \"\$(zoxide init bash)\"
+    elif [ -n \"\$ZSH_VERSION\" ]; then
+        eval \"\$(zoxide init zsh)\"
+    fi
+fi
+
+if command -v fzf &>/dev/null; then
+    [ -f /usr/share/doc/fzf/examples/key-bindings.bash ] && source /usr/share/doc/fzf/examples/key-bindings.bash
+    [ -f /usr/share/doc/fzf/examples/completion.bash ] && source /usr/share/doc/fzf/examples/completion.bash
+fi
+# <<< system-wide zoxide + fzf setup <<<
+"
+
+echo "=== Configuring global shell integration ==="
+
+for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
+    if [ -f "$rc" ]; then
+        if ! grep -q "system-wide zoxide + fzf setup" "$rc"; then
+            echo "$SETUP_BLOCK" | sudo tee -a "$rc" >/dev/null
+            echo "✔ Added zoxide + fzf setup to $rc"
         else
-            echo 'eval "$(zoxide init '"${SHELL_PATH##*/}"')" ' >> "$INIT"
+            echo "↺ Integration already present in $rc"
         fi
-    fi
-
-    # fzf key bindings + Ctrl+R
-    if [[ "$SHELL_PATH" == */bash || "$SHELL_PATH" == */zsh ]]; then
-        if ! grep -q "fzf key bindings" "$INIT" 2>/dev/null; then
-            echo 'if [ -f /usr/local/bin/fzf ]; then' >> "$INIT"
-            echo '  source /usr/local/bin/fzf 2>/dev/null' >> "$INIT"
-            echo '  export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border"' >> "$INIT"
-            echo '  bind '"'"'"\C-r": "\C-a\C-k$(history | fzf --tac --no-sort --preview '\''echo {}'\'')\e\C-e\C-y\C-m"'"'" >> "$INIT"
-            echo 'fi' >> "$INIT"
-        fi
-    fi
-
-    # interactive-only cd using zoxide + fzf
-    if ! grep -q "cd() {" "$INIT" 2>/dev/null; then
-        echo '' >> "$INIT"
-        echo '# Override cd for interactive fuzzy selection only' >> "$INIT"
-        echo 'cd() {' >> "$INIT"
-        echo '  if [ "$#" -eq 0 ]; then' >> "$INIT"
-        echo '    builtin cd ~' >> "$INIT"
-        echo '  else' >> "$INIT"
-        echo '    target=$(zoxide query "$1" --interactive 2>/dev/null)' >> "$INIT"
-        echo '    if [ -n "$target" ]; then' >> "$INIT"
-        echo '      builtin cd "$target"' >> "$INIT"
-        echo '    else' >> "$INIT"
-        echo '      echo "No selection, staying in current directory"' >> "$INIT"
-        echo '    fi' >> "$INIT
-        echo '  fi' >> "$INIT"
-        echo '}' >> "$INIT"
     fi
 done
 
-echo "✅ zoxide + fzf with Ctrl+T, Ctrl+R, and interactive-only cd installed system-wide."
-echo "Users may need to log out/in to apply changes."
+# ---------------------------------------------------------------
+# Completion
+# ---------------------------------------------------------------
+echo
+echo "=== ✅ Installation Complete ==="
+echo "Installed:"
+echo "  • tmux   - terminal multiplexer"
+echo "  • fzf    - fuzzy finder"
+echo "  • zoxide - smarter cd command"
+echo "  • TPM    - tmux plugin manager"
+echo
+echo "🧩 To enable tmux plugins, start tmux and press:"
+echo "      Ctrl + b then I  (capital i)"
+echo
+echo "💡 Restart your terminal or run:"
+echo "   source /etc/bash.bashrc   # for bash"
+echo "   source /etc/zsh/zshrc     # for zsh"
+echo
+echo "📂 Global tmux config: /etc/tmux.conf"
+echo "📦 TPM directory:      /usr/share/tmux/plugins/tpm"
