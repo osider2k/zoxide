@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -e
 
+# -----------------------------
+# Request sudo upfront
+# -----------------------------
+if [ "$EUID" -ne 0 ]; then
+    echo "This script requires sudo privileges."
+    sudo -v  # Ask for password once
+fi
+
+# Keep sudo alive until script finishes
+while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+
 echo "=== System-wide installer: tmux + TPM + fzf + zoxide ==="
 
 # -----------------------------
