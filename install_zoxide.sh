@@ -24,12 +24,12 @@ get_latest_release() {
 }
 
 # ------------------------------
-# Install or update zoxide
+# Install or update zoxide (stable glibc)
 # ------------------------------
 ZOX_LATEST=$(get_latest_release "ajeetdsouza/zoxide")
 if ! command -v zoxide >/dev/null 2>&1 || [ "$(zoxide --version | grep -oE 'v[0-9\.]+')" != "$ZOX_LATEST" ]; then
     echo "Installing/updating zoxide $ZOX_LATEST..."
-    URL="https://github.com/ajeetdsouza/zoxide/releases/download/$ZOX_LATEST/zoxide-$ZOX_LATEST-$ARCH-unknown-linux-musl.tar.gz"
+    URL="https://github.com/ajeetdsouza/zoxide/releases/download/$ZOX_LATEST/zoxide-$ZOX_LATEST-$ARCH-unknown-linux-gnu.tar.gz"
     curl -L "$URL" -o /tmp/zoxide.tar.gz
     sudo tar -C /usr/local/bin -xzf /tmp/zoxide.tar.gz
     rm /tmp/zoxide.tar.gz
@@ -100,9 +100,9 @@ for user in $(cut -f1 -d: /etc/passwd); do
         echo '    target=$(zoxide query "$1" --interactive 2>/dev/null)' >> "$INIT"
         echo '    if [ -n "$target" ]; then' >> "$INIT"
         echo '      builtin cd "$target"' >> "$INIT"
-        echo '    else' >> "$INIT'
+        echo '    else' >> "$INIT"
         echo '      echo "No selection, staying in current directory"' >> "$INIT"
-        echo '    fi' >> "$INIT"
+        echo '    fi' >> "$INIT
         echo '  fi' >> "$INIT"
         echo '}' >> "$INIT"
     fi
