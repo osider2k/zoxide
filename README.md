@@ -1,5 +1,5 @@
 # zoxide
-Installer for zoxide + fzf on Linux (not working)
+Setup tmux + fzf + zoxide + fzf-tab
 ```ssh
 curl -fsSL https://raw.githubusercontent.com/osider2k/zoxide/refs/heads/main/install_zoxide.sh | bash
 ```
