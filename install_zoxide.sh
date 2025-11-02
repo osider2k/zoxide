@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =====================================================
-# Clean System-Wide Installation:
-# tmux + TPM + zoxide + fzf-tab + fzf (from GitHub)
-# Zsh already installed
+# Safe System-Wide Installation:
+# tmux + TPM + zoxide + fzf-tab + fzf
+# Preserves existing Zsh settings
 # =====================================================
 
 set -euo pipefail
@@ -13,9 +13,9 @@ sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
 # -----------------------------------------------------
-# CLEAN PREVIOUS INSTALLS
+# CLEAN PREVIOUS INSTALLS (tmux, plugins, fzf-tab, fzf)
 # -----------------------------------------------------
-echo "=== Cleaning old installs ==="
+echo "=== Cleaning old tmux/fzf installs (optional) ==="
 sudo rm -rf /usr/share/tmux/plugins/tpm /etc/tmux.conf
 for home_dir in /home/*; do
     [ -d "$home_dir" ] || continue
@@ -25,9 +25,9 @@ done
 sudo rm -rf /root/.tmux /root/.zsh/fzf-tab /root/.tmux.conf /root/.fzf
 
 # -----------------------------------------------------
-# INSTALL PACKAGES (except fzf)
+# INSTALL PACKAGES
 # -----------------------------------------------------
-echo "=== Installing required packages (git, tmux, zoxide) ==="
+echo "=== Installing required packages ==="
 sudo apt update -y
 sudo apt install -y git tmux zoxide
 
@@ -62,30 +62,36 @@ echo "=== Setting up zoxide and fzf-tab ==="
 for home_dir in /home/*; do
     [ -d "$home_dir" ] || continue
     user=$(basename "$home_dir")
+    zsh_dir="$home_dir/.zsh"
     zshrc="$home_dir/.zshrc"
 
-    sudo -u "$user" mkdir -p "$home_dir/.zsh"
+    sudo -u "$user" mkdir -p "$zsh_dir"
 
     # Clone fzf-tab
-    sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$home_dir/.zsh/fzf-tab"
+    sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$zsh_dir/fzf-tab"
 
-    # Clone fzf from GitHub (no automatic install yet)
+    # Clone fzf from GitHub (manual install later)
     sudo -u "$user" git clone --depth 1 https://github.com/junegunn/fzf.git "$home_dir/.fzf"
 
-    # Write zshrc
-    sudo tee "$zshrc" >/dev/null <<'EOF'
-# Load fzf (before zoxide)
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+    # Backup existing zshrc if it exists
+    if [ -f "$zshrc" ]; then
+        sudo cp "$zshrc" "$zshrc.backup.$(date +%s)"
+        echo "Backed up $zshrc"
+    else
+        sudo touch "$zshrc"
+        sudo chown "$user:$user" "$zshrc"
+    fi
 
-# zoxide
+    # Append fzf-tab and zoxide config safely
+    sudo tee -a "$zshrc" >/dev/null <<'EOF'
+# ===== fzf-tab & zoxide =====
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 eval "$(zoxide init zsh)"
 alias cd="z"
-
-# fzf-tab (always-on interactive completion)
 source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
-    sudo chown "$user:$user" -R "$zshrc"
+    sudo chown "$user:$user" -R "$zsh_dir" "$zshrc" "$home_dir/.fzf"
 done
 
 # Root config
@@ -93,20 +99,21 @@ sudo mkdir -p /root/.zsh
 sudo git clone https://github.com/Aloxaf/fzf-tab /root/.zsh/fzf-tab
 sudo git clone --depth 1 https://github.com/junegunn/fzf.git /root/.fzf
 
-sudo tee /root/.zshrc >/dev/null <<'EOF'
-# Load fzf (before zoxide)
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+# Backup root .zshrc and append configuration
+if [ -f /root/.zshrc ]; then
+    sudo cp /root/.zshrc /root/.zshrc.backup.$(date +%s)
+fi
 
-# zoxide
+sudo tee -a /root/.zshrc >/dev/null <<'EOF'
+# ===== fzf-tab & zoxide =====
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 eval "$(zoxide init zsh)"
 alias cd="z"
-
-# fzf-tab (always-on interactive completion)
 source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
 # -----------------------------------------------------
-# FZF INSTALL (manual, interactive)
+# FZF manual install reminder
 # -----------------------------------------------------
 echo ""
 echo "=== FZF interactive install required ==="
@@ -120,11 +127,9 @@ echo ""
 echo "For root:"
 echo "  sudo /root/.fzf/install"
 echo ""
-echo "This step must be done manually to allow y/n prompts."
-echo ""
 
 # -----------------------------------------------------
 echo "=== ✅ Installation complete ==="
-echo "Reload zsh with: source ~/.zshrc"
-echo "Reload tmux with: tmux source ~/.tmux.conf"
+echo "Reload Zsh: source ~/.zshrc"
+echo "Reload tmux: tmux source ~/.tmux.conf"
 echo "Open tmux and press Ctrl+b then I to install TPM plugins."
