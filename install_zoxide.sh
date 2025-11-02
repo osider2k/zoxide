@@ -33,8 +33,6 @@ fi
 # -----------------------------
 echo "Installing latest zoxide..."
 curl -fsSL https://github.com/ajeetdsouza/zoxide/releases/latest/download/install.sh | bash
-
-# Ensure /usr/local/bin is in PATH
 export PATH="/usr/local/bin:$PATH"
 
 # -----------------------------
@@ -57,16 +55,28 @@ run-shell /usr/share/tmux/plugins/tpm/tpm
 EOF
 
 # -----------------------------
-# Zoxide default options (without --fzf)
+# Zoxide default options
 # -----------------------------
 HOOK_OPTION="--hook"
 CMD_OPTION="--cmd cd"
 SET_DB=true
+ENABLE_FZF=false
+
+# Check if zoxide supports --fzf
+if zoxide init bash --help 2>&1 | grep -q -- '--fzf'; then
+    ENABLE_FZF=true
+fi
+if $ENABLE_FZF; then
+    FZF_OPTION="--fzf"
+else
+    FZF_OPTION=""
+fi
 
 echo
 echo "All zoxide options are automatically enabled:"
 echo "  • Auto-tracking (--hook)"
 echo "  • Override cd (--cmd cd)"
+[ $ENABLE_FZF = true ] && echo "  • Fuzzy search (--fzf)"
 echo "  • User-specific database (ZO_DATA)"
 echo
 
@@ -89,9 +99,9 @@ SETUP_BLOCK="
 # >>> system-wide zoxide setup >>>
 if command -v zoxide &>/dev/null; then
     if [ -n \"\$BASH_VERSION\" ]; then
-        eval \"\$(zoxide init bash $HOOK_OPTION $CMD_OPTION)\"
+        eval \"\$(zoxide init bash $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
     elif [ -n \"\$ZSH_VERSION\" ]; then
-        eval \"\$(zoxide init zsh $HOOK_OPTION $CMD_OPTION)\"
+        eval \"\$(zoxide init zsh $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
     fi
 fi
 # <<< system-wide zoxide setup <<<
