@@ -1,160 +1,108 @@
 #!/usr/bin/env bash
-set -e
+# =====================================================
+# Clean System-Wide Installation Script:
+# tmux + TPM + fzf + zoxide + fzf-tab (Zsh)
+# =====================================================
 
-# -----------------------------
-# Request sudo upfront
-# -----------------------------
-if [ "$EUID" -ne 0 ]; then
-    echo "This script requires sudo privileges."
-    sudo -v
-fi
+set -euo pipefail
+trap 'echo "Error occurred on line $LINENO"; exit 1' ERR
+
+echo "=== Requesting sudo privilege (will ask once) ==="
+sudo -v
+# Keep sudo alive
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-echo "=== System-wide installer: tmux + TPM + fzf + latest zoxide with auto-fuzzy ==="
+echo "=== Cleaning previous installations ==="
+sudo rm -rf /usr/share/tmux/plugins/tpm
+sudo rm -f /etc/tmux.conf
+for user_home in /home/*; do
+    [ -d "$user_home" ] || continue
+    rm -f "$user_home/.tmux.conf"
+    rm -rf "$user_home/.tmux"
+    rm -rf "$user_home/.fzf"
+    rm -rf "$user_home/.zsh/fzf-tab"
+done
+sudo rm -rf /root/.tmux /root/.fzf /root/.zsh/fzf-tab /root/.tmux.conf
 
-# -----------------------------
-# Detect package manager
-# -----------------------------
-if command -v apt &>/dev/null; then
-    sudo apt update -y
-    sudo apt install -y tmux fzf git curl
-elif command -v dnf &>/dev/null; then
-    sudo dnf -y update
-    sudo dnf -y install tmux fzf git curl
-elif command -v pacman &>/dev/null; then
-    sudo pacman -Sy --noconfirm tmux fzf git curl
-else
-    echo "❌ No supported package manager found."
-    exit 1
-fi
+echo "=== Installing required packages ==="
+sudo apt update -y
+sudo apt install -y git tmux fzf zoxide
 
-# -----------------------------
-# Install latest zoxide from GitHub
-# -----------------------------
-echo "Installing latest zoxide..."
-curl -fsSL https://github.com/ajeetdsouza/zoxide/releases/latest/download/install.sh | bash
-export PATH="/usr/local/bin:$PATH"
+# -----------------------------------------------------
+# TMUX + TPM SETUP
+# -----------------------------------------------------
+echo "=== Installing TPM (Tmux Plugin Manager) ==="
+sudo git clone https://github.com/tmux-plugins/tpm /usr/share/tmux/plugins/tpm
 
-# -----------------------------
-# Clean TPM and reinstall
-# -----------------------------
-TPM_DIR="/usr/share/tmux/plugins/tpm"
-[ -d "$TPM_DIR" ] && sudo rm -rf "$TPM_DIR"
-sudo mkdir -p /usr/share/tmux/plugins
-sudo git clone --depth=1 https://github.com/tmux-plugins/tpm "$TPM_DIR"
-sudo chmod -R 755 "$TPM_DIR"
-
-# Minimal global tmux.conf
+echo "=== Creating global tmux configuration ==="
 sudo tee /etc/tmux.conf >/dev/null <<'EOF'
-set -g mouse on
-set -g history-limit 10000
-setw -g mode-keys vi
+# ===============================================
+# Global Tmux Configuration with TPM
+# ===============================================
 
-# TPM plugins
-set -g @tpm_silent true
+# List of plugins
 set -g @plugin 'tmux-plugins/tpm'
 set -g @plugin 'tmux-plugins/tmux-sensible'
-run-shell /usr/share/tmux/plugins/tpm/tpm
+
+# Initialize TPM (keep this line at the very bottom)
+run '/usr/share/tmux/plugins/tpm/tpm'
 EOF
 
-# -----------------------------
-# Zoxide options
-# -----------------------------
-HOOK_OPTION="--hook"
-CMD_OPTION="--cmd cd"
-SET_DB=true
-ENABLE_FZF=false
+echo "=== Linking global tmux.conf for all users ==="
+for user_home in /home/*; do
+    [ -d "$user_home" ] || continue
+    sudo -u "$(basename "$user_home")" ln -sf /etc/tmux.conf "$user_home/.tmux.conf"
+done
+sudo ln -sf /etc/tmux.conf /root/.tmux.conf
 
-# Check if zoxide supports --fzf
-if zoxide init zsh --help 2>&1 | grep -q -- '--fzf'; then
-    ENABLE_FZF=true
-fi
-if $ENABLE_FZF; then
-    FZF_OPTION="--fzf"
-else
-    FZF_OPTION=""
-fi
+# -----------------------------------------------------
+# FZF + ZOXIDE + FZF-TAB CONFIGURATION
+# -----------------------------------------------------
+echo "=== Configuring Zsh integrations (fzf, zoxide, fzf-tab) ==="
+for user_home in /home/*; do
+    [ -d "$user_home" ] || continue
+    user_name=$(basename "$user_home")
+    zshrc="$user_home/.zshrc"
 
-echo
-echo "Zoxide options enabled:"
-echo "  • Auto-tracking (--hook)"
-echo "  • Override cd (--cmd cd)"
-[ $ENABLE_FZF = true ] && echo "  • Interactive fuzzy search (--fzf)"
-echo "  • User-specific database (ZO_DATA)"
-echo
+    echo "--- Cleaning and setting up ~/.zshrc for $user_name ---"
+    sudo -u "$user_name" bash -c "rm -f $zshrc && touch $zshrc"
 
-# -----------------------------
-# Clean previous system-wide zoxide setup
-# -----------------------------
-GLOBAL_BASHRC="/etc/bash.bashrc"
-GLOBAL_ZSHRC="/etc/zsh/zshrc"
+    sudo -u "$user_name" bash -c "mkdir -p $user_home/.zsh"
+    sudo -u "$user_name" git clone https://github.com/Aloxaf/fzf-tab "$user_home/.zsh/fzf-tab"
 
-for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
-    [ -f "$rc" ] && sudo sed -i '/system-wide zoxide setup/,+15d' "$rc" || true
+    sudo tee "$zshrc" >/dev/null <<'EOF'
+# =====================================================
+# Zsh Configuration with fzf, zoxide, fzf-tab
+# =====================================================
+
+# Load fzf
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# zoxide setup
+eval "$(zoxide init zsh)"
+alias cd="z"
+
+# Enable fzf-tab for always-on interactive completion
+source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
+EOF
+
+    sudo chown "$user_name:$user_name" "$zshrc"
 done
 
-# -----------------------------
-# Add fresh system-wide zoxide block
-# -----------------------------
-SETUP_BLOCK="
-# >>> system-wide zoxide setup >>>
-if command -v zoxide &>/dev/null; then
-    if [ -n \"\$BASH_VERSION\" ]; then
-        eval \"\$(zoxide init bash $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
-    elif [ -n \"\$ZSH_VERSION\" ]; then
-        # Source fzf keybindings if available
-        [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
-        eval \"\$(zoxide init zsh $HOOK_OPTION $FZF_OPTION $CMD_OPTION)\"
-    fi
-fi
-# <<< system-wide zoxide setup <<<
-"
+# Also configure root user
+mkdir -p /root/.zsh
+git clone https://github.com/Aloxaf/fzf-tab /root/.zsh/fzf-tab
+cat <<'EOF' > /root/.zshrc
+# =====================================================
+# Root Zsh Configuration with fzf, zoxide, fzf-tab
+# =====================================================
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+eval "$(zoxide init zsh)"
+alias cd="z"
+source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
+EOF
 
-for rc in "$GLOBAL_BASHRC" "$GLOBAL_ZSHRC"; do
-    [ -f "$rc" ] && echo "$SETUP_BLOCK" | sudo tee -a "$rc" >/dev/null
-done
-
-# -----------------------------
-# User-specific ZO_DATA
-# -----------------------------
-if [[ "$SET_DB" = true ]]; then
-    USER_DB="$HOME/.local/share/zoxide/db.zo"
-    [ -f "$USER_DB" ] && rm -f "$USER_DB"
-    mkdir -p "$(dirname "$USER_DB")"
-    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-        [ -f "$rc" ] && grep -q "export ZO_DATA" "$rc" || echo "export ZO_DATA=\"\$HOME/.local/share/zoxide/db.zo\"" >> "$rc"
-    done
-fi
-
-# -----------------------------
-# Reload shell configuration
-# -----------------------------
-CURRENT_SHELL=$(basename "$SHELL")
-case "$CURRENT_SHELL" in
-    bash)
-        source /etc/bash.bashrc || true
-        ;;
-    zsh)
-        source /etc/zsh/zshrc || true
-        ;;
-esac
-
-# -----------------------------
-# Verify cd override
-# -----------------------------
-if type cd | grep -q 'zoxide'; then
-    echo "✔ cd is successfully overridden by zoxide"
-else
-    echo "⚠ cd is still the shell builtin. Restart your shell to apply."
-fi
-
-echo
-echo "=== ✅ Installation complete ==="
-echo "Restart your terminal or run the appropriate source command for your shell:"
-echo "  source /etc/bash.bashrc  # bash"
-echo "  source /etc/zsh/zshrc    # zsh"
-echo "Usage:"
-echo "  z <partial>  → auto fuzzy jump with interactive window"
-echo "  cd <path>    → also overridden by zoxide"
-echo "  tmux         → plugins installed and silent"
-echo "Press Ctrl+b then I in tmux to install TPM plugins if needed"
+echo "=== All installations and configurations complete! ==="
+echo "Reload zsh with: source ~/.zshrc"
+echo "Reload tmux with: tmux source ~/.tmux.conf"
+echo "Open tmux and press Ctrl+b then I to install TPM plugins."
