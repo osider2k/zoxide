@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =====================================================
 # Full Clean System-Wide Installer:
-# Zsh + Oh My Zsh + Powerlevel10k + tmux + TPM + zoxide + fzf-tab + fzf
-# Completely removes old configs before install
+# Zsh + Oh My Zsh + Powerlevel10k + tmux + TPM + zoxide + fzf-tab
+# FZF repo is cloned, but interactive install must be run manually
 # =====================================================
 
 set -euo pipefail
@@ -77,7 +77,7 @@ for home_dir in /home/* /root; do
 done
 
 # -----------------------------------------------------
-# 5) Install zoxide + fzf-tab + fzf (non-interactive)
+# 5) Install zoxide + fzf-tab + clone FZF repo
 # -----------------------------------------------------
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue
@@ -91,32 +91,27 @@ for home_dir in /home/* /root; do
     FZF_TAB_DIR="$zsh_dir/fzf-tab"
     sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$FZF_TAB_DIR"
 
-    # fzf (non-interactive install)
+    # fzf repo (interactive install deferred)
     FZF_DIR="$home_dir/.fzf"
     sudo -u "$user" git clone --depth 1 https://github.com/junegunn/fzf.git "$FZF_DIR"
-
-    # Ensure ownership (fix permission issues)
     sudo chown -R "$user:$user" "$FZF_DIR"
-
-    # Run non-interactive install as user
-    sudo -u "$user" "$FZF_DIR/install" --all --no-bash --no-fish
 
     # Backup existing zshrc
     [ -f "$zshrc" ] && sudo cp "$zshrc" "$zshrc.backup.$(date +%s)" || sudo touch "$zshrc"
 
-    # Append interactive-safe block for fzf-tab & zoxide
+    # Append interactive-safe block for zoxide & fzf-tab
     sudo tee -a "$zshrc" >/dev/null <<'EOF'
-# === fzf-tab & zoxide (interactive only) ===
+# === fzf-tab & zoxide ===
 if [[ $- == *i* ]]; then
   [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
   eval "$(zoxide init zsh)"
   alias cd="z"
-  FZF_TAB_DIR="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/fzf-tab"
+  FZF_TAB_DIR="$HOME/.zsh/fzf-tab"
   [[ -d "$FZF_TAB_DIR" ]] && source "$FZF_TAB_DIR/fzf-tab.plugin.zsh"
 fi
 EOF
 
-    sudo chown -R "$user:$user" "$zsh_dir" "$zshrc" "$FZF_DIR"
+    sudo chown -R "$user:$user" "$zsh_dir" "$zshrc"
 done
 
 # -----------------------------------------------------
@@ -132,9 +127,21 @@ for uhome in /home/* /root; do
 done
 
 # -----------------------------------------------------
+# 7) Instructions for FZF
+# -----------------------------------------------------
+echo ""
+echo "=== FZF setup remaining ==="
+echo "The FZF repository has been cloned, but interactive install must be run manually."
+for uhome in /home/* /root; do
+    [ -d "$uhome/.fzf" ] || continue
+    echo "User '$(basename "$uhome")' run:"
+    echo "  $uhome/.fzf/install"
+done
+
+# -----------------------------------------------------
 echo ""
 echo "=== ✅ Full Clean Installation Complete ==="
 echo "Reload Zsh: source ~/.zshrc"
 echo "Reload tmux: tmux source ~/.tmux.conf"
 echo "Open tmux and press Ctrl+b then I to install TPM plugins"
-echo "All users now have Zsh + Powerlevel10k + tmux + fzf-tab + zoxide + FZF fully set up"
+echo "FZF setup must be completed manually per user"
