@@ -86,6 +86,9 @@ source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
     sudo chown "$user:$user" -R "$zshrc"
+
+    # Run fzf install script interactively
+    sudo -u "$user" bash -c "cd $home_dir/.fzf && ./install"
 done
 
 # Root config
@@ -105,19 +108,10 @@ alias cd="z"
 source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
-# -----------------------------------------------------
-# RUN FZF INSTALL SCRIPT LAST
-# -----------------------------------------------------
-echo "=== Running fzf install script for each user ==="
-for home_dir in /home/*; do
-    [ -d "$home_dir" ] || continue
-    user=$(basename "$home_dir")
-    sudo -u "$user" bash -c "$home_dir/.fzf/install"
-done
+# Run fzf install for root
+sudo bash -c "cd /root/.fzf && ./install"
 
-# Root
-sudo bash -c "/root/.fzf/install"
-
+# -----------------------------------------------------
 echo "=== ✅ Installation complete ==="
 echo "Reload zsh with: source ~/.zshrc"
 echo "Reload tmux with: tmux source ~/.tmux.conf"
