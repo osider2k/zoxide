@@ -12,59 +12,41 @@ case $ARCH in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-OS=linux
-
 # Install minimal dependencies
 sudo apt update
 sudo apt install -y curl tar
 
-# Function to install/update GitHub binary if missing or outdated
-install_github_binary() {
-    local repo=$1
-    local binary=$2
-    local url_pattern=$3    # e.g., Alpine binary name
-    local version_check=$4  # command to get installed version
+# Get latest release version for zoxide
+ZOX_LATEST=$(curl -s https://api.github.com/repos/ajeetdsouza/zoxide/releases/latest \
+    | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
 
-    # Get latest release
-    LATEST=$(curl -s "https://api.github.com/repos/$repo/releases/latest" \
-        | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
-    if [ -z "$LATEST" ]; then
-        echo "Failed to fetch latest release for $repo"
-        exit 1
-    fi
+# Install or update zoxide (Alpine/musl binary)
+if ! command -v zoxide >/dev/null 2>&1 || [ "$(zoxide --version | grep -oE 'v[0-9\.]+')" != "$ZOX_LATEST" ]; then
+    echo "Installing/updating zoxide $ZOX_LATEST..."
+    URL="https://github.com/ajeetdsouza/zoxide/releases/download/$ZOX_LATEST/zoxide-$ZOX_LATEST-$ARCH-unknown-linux-musl.tar.gz"
+    curl -L "$URL" -o /tmp/zoxide.tar.gz
+    sudo tar -C /usr/local/bin -xzf /tmp/zoxide.tar.gz
+    rm /tmp/zoxide.tar.gz
+    echo "zoxide $ZOX_LATEST installed."
+else
+    echo "zoxide is already the latest ($ZOX_LATEST)"
+fi
 
-    # Check installed version
-    if command -v $binary >/dev/null 2>&1; then
-        INSTALLED=$($version_check 2>/dev/null)
-        if [ "$INSTALLED" == "$LATEST" ]; then
-            echo "$binary is already the latest ($LATEST)"
-            return
-        fi
-    fi
+# Get latest release for fzf
+FZF_LATEST=$(curl -s https://api.github.com/repos/junegunn/fzf/releases/latest \
+    | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
 
-    echo "Installing/updating $binary to $LATEST..."
-
-    # Remove old binary
-    sudo rm -f "/usr/local/bin/$binary"
-    rm -rf "$HOME/.$binary"
-
-    # Download binary (Alpine/musl for zoxide)
-    URL=$(echo "$url_pattern" | sed "s/{{LATEST}}/$LATEST/; s/{{ARCH}}/$ARCH/")
-    curl -L "$URL" -o /tmp/$binary.tar.gz
-    sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
-    rm /tmp/$binary.tar.gz
-
-    echo "$binary $LATEST installed."
-}
-
-# Install zoxide (Alpine binary) and fzf
-install_github_binary "ajeetdsouza/zoxide" "zoxide" \
-    "https://github.com/ajeetdsouza/zoxide/releases/download/{{LATEST}}/zoxide-{{LATEST}}-{{ARCH}}-unknown-linux-musl.tar.gz" \
-    "zoxide --version | grep -oE 'v[0-9\.]+'"
-
-install_github_binary "junegunn/fzf" "fzf" \
-    "https://github.com/junegunn/fzf/releases/download/{{LATEST}}/fzf-{{LATEST}}-{{ARCH}}.tar.gz" \
-    "fzf --version | grep -oE '^[0-9\.]+'"
+# Install or update fzf
+if ! command -v fzf >/dev/null 2>&1 || [ "$(fzf --version | grep -oE '^[0-9\.]+')" != "$FZF_LATEST" ]; then
+    echo "Installing/updating fzf $FZF_LATEST..."
+    URL="https://github.com/junegunn/fzf/releases/download/$FZF_LATEST/fzf-$FZF_LATEST-$ARCH.tar.gz"
+    curl -L "$URL" -o /tmp/fzf.tar.gz
+    sudo tar -C /usr/local/bin -xzf /tmp/fzf.tar.gz
+    rm /tmp/fzf.tar.gz
+    echo "fzf $FZF_LATEST installed."
+else
+    echo "fzf is already the latest ($FZF_LATEST)"
+fi
 
 # Configure all normal users
 for user in $(cut -f1 -d: /etc/passwd); do
