@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
-# Ask for sudo once
+# Ask sudo once
 sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
-# Detect OS and architecture
+# Detect architecture
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="x86_64" ;;
@@ -13,60 +13,64 @@ case $ARCH in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-OS=$(uname | tr '[:upper:]' '[:lower:]')
-if [[ "$OS" != "linux" && "$OS" != "darwin" ]]; then
-    echo "Unsupported OS: $OS"
-    exit 1
-fi
+OS=linux
 
-# Minimal dependencies
-if command -v apt >/dev/null; then
-    sudo apt update && sudo apt install -y curl tar
-elif command -v dnf >/dev/null; then
-    sudo dnf install -y curl tar
-elif command -v yum >/dev/null; then
-    sudo yum install -y curl tar
-elif command -v pacman >/dev/null; then
-    sudo pacman -Syu --noconfirm curl tar
-elif command -v zypper >/dev/null; then
-    sudo zypper install -y curl tar
-else
-    echo "Please install curl and tar manually."
-    exit 1
-fi
+# Install minimal dependencies
+sudo apt update
+sudo apt install -y curl tar
 
-# Helper to install GitHub latest release
+# Helper to install GitHub latest release if missing or outdated
 install_github_binary() {
     local repo=$1
     local binary=$2
     local os=$3
     local arch=$4
+    local check_version=$5   # optional: how to extract version from binary output
 
-    LATEST=$(curl -s "https://api.github.com/repos/$repo/releases/latest" | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
+    # Get latest release
+    LATEST=$(curl -s "https://api.github.com/repos/$repo/releases/latest" \
+        | grep '"tag_name":' | head -1 | cut -d '"' -f 4)
     if [ -z "$LATEST" ]; then
         echo "Failed to fetch latest release for $repo"
         exit 1
     fi
 
+    # Check if binary exists and is latest
+    if command -v $binary >/dev/null 2>&1; then
+        if [ -n "$check_version" ]; then
+            INSTALLED=$($check_version 2>/dev/null)
+            if [ "$INSTALLED" == "$LATEST" ]; then
+                echo "$binary is already the latest ($LATEST)"
+                return
+            fi
+        else
+            echo "$binary is already installed, skipping"
+            return
+        fi
+    fi
+
+    echo "Installing/updating $binary to $LATEST..."
+
     # Remove old binary
     sudo rm -f "/usr/local/bin/$binary"
     rm -rf "$HOME/.$binary"
 
-    # Build download URL
+    # Build download URL and fetch
     URL="https://github.com/$repo/releases/download/$LATEST/$binary-$LATEST-$os-$arch.tar.gz"
-    echo "Downloading $binary $LATEST..."
     curl -L "$URL" -o /tmp/$binary.tar.gz
 
     # Extract binary
     sudo tar -C /usr/local/bin -xzf /tmp/$binary.tar.gz
     rm /tmp/$binary.tar.gz
+
+    echo "$binary $LATEST installed."
 }
 
-# Install latest zoxide and fzf
-install_github_binary "ajeetdsouza/zoxide" "zoxide" "$OS" "$ARCH"
-install_github_binary "junegunn/fzf" "fzf" "$OS" "$ARCH"
+# Install zoxide and fzf only if missing or outdated
+install_github_binary "ajeetdsouza/zoxide" "zoxide" "$OS" "$ARCH" "zoxide --version | grep -oE 'v[0-9\.]+'"
+install_github_binary "junegunn/fzf" "fzf" "$OS" "$ARCH" "fzf --version | grep -oE '^[0-9\.]+'"
 
-# Configure all users
+# Configure all normal users
 for user in $(cut -f1 -d: /etc/passwd); do
     UID=$(id -u "$user")
     [ "$UID" -lt 1000 ] && continue  # skip system users
@@ -111,7 +115,7 @@ for user in $(cut -f1 -d: /etc/passwd); do
         echo '    target=$(zoxide query "$1" --interactive 2>/dev/null)' >> "$INIT"
         echo '    if [ -n "$target" ]; then' >> "$INIT"
         echo '      builtin cd "$target"' >> "$INIT"
-        echo '    else' >> "$INIT"
+        echo '    else' >> "$INIT'
         echo '      echo "No selection, staying in current directory"' >> "$INIT"
         echo '    fi' >> "$INIT"
         echo '  fi' >> "$INIT"
@@ -119,5 +123,5 @@ for user in $(cut -f1 -d: /etc/passwd); do
     fi
 done
 
-echo "✅ zoxide + fzf with Ctrl+T, Ctrl+R, and interactive-only cd installed for all users."
+echo "✅ zoxide + fzf with Ctrl+T, Ctrl+R, and interactive-only cd installed system-wide."
 echo "Users may need to log out/in to apply changes."
