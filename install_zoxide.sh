@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =====================================================
-# Clean System-Wide Installer:
+# Full Clean System-Wide Installer:
 # Zsh + Oh My Zsh + Powerlevel10k + tmux + TPM + zoxide + fzf-tab + fzf
-# Completely removes old configs first
+# Completely removes old configs before install
 # =====================================================
 
 set -euo pipefail
@@ -13,7 +13,7 @@ sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
 # -----------------------------------------------------
-# 0) Remove all old configs
+# 0) Remove all old configurations
 # -----------------------------------------------------
 echo "=== Removing old configurations ==="
 sudo rm -rf /usr/share/oh-my-zsh /usr/share/tmux/plugins/tpm /etc/tmux.conf
@@ -53,8 +53,9 @@ sudo sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' /etc/skel
 # -----------------------------------------------------
 # 4) Install tmux + TPM
 # -----------------------------------------------------
+TPM_DIR="/usr/share/tmux/plugins/tpm"
 echo "Installing TPM..."
-sudo git clone https://github.com/tmux-plugins/tpm /usr/share/tmux/plugins/tpm
+sudo git clone https://github.com/tmux-plugins/tpm "$TPM_DIR"
 
 sudo tee /etc/tmux.conf >/dev/null <<'EOF'
 # === tmux configuration ===
@@ -76,7 +77,7 @@ for home_dir in /home/* /root; do
 done
 
 # -----------------------------------------------------
-# 5) Install zoxide + fzf-tab + fzf
+# 5) Install zoxide + fzf-tab + fzf (non-interactive)
 # -----------------------------------------------------
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue
@@ -87,13 +88,16 @@ for home_dir in /home/* /root; do
     sudo -u "$user" mkdir -p "$zsh_dir"
 
     # fzf-tab
-    sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$zsh_dir/fzf-tab"
+    FZF_TAB_DIR="$zsh_dir/fzf-tab"
+    sudo git clone https://github.com/Aloxaf/fzf-tab "$FZF_TAB_DIR"
 
-    # fzf (manual install later)
-    sudo -u "$user" git clone --depth 1 https://github.com/junegunn/fzf.git "$home_dir/.fzf"
+    # fzf (non-interactive install)
+    FZF_DIR="$home_dir/.fzf"
+    sudo git clone --depth 1 https://github.com/junegunn/fzf.git "$FZF_DIR"
+    sudo -u "$user" "$FZF_DIR/install" --all --no-bash --no-fish
 
-    # Create fresh .zshrc skeleton if missing
-    [ -f "$zshrc" ] || sudo -u "$user" cp /etc/skel/.zshrc "$zshrc"
+    # Backup existing zshrc
+    [ -f "$zshrc" ] && sudo cp "$zshrc" "$zshrc.backup.$(date +%s)" || sudo touch "$zshrc"
 
     # Append interactive-safe block for fzf-tab & zoxide
     sudo tee -a "$zshrc" >/dev/null <<'EOF'
@@ -107,7 +111,7 @@ if [[ $- == *i* ]]; then
 fi
 EOF
 
-    sudo chown -R "$user:$user" "$zsh_dir" "$zshrc" "$home_dir/.fzf"
+    sudo chown -R "$user:$user" "$zsh_dir" "$zshrc" "$FZF_DIR"
 done
 
 # -----------------------------------------------------
@@ -124,8 +128,8 @@ done
 
 # -----------------------------------------------------
 echo ""
-echo "=== ✅ Clean installation complete ==="
+echo "=== ✅ Full Clean Installation Complete ==="
 echo "Reload Zsh: source ~/.zshrc"
 echo "Reload tmux: tmux source ~/.tmux.conf"
 echo "Open tmux and press Ctrl+b then I to install TPM plugins"
-echo "To enable fzf key bindings, run: ~/.fzf/install for each user if desired"
+echo "All users now have Zsh + Powerlevel10k + tmux + fzf-tab + zoxide + FZF fully set up"
