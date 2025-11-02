@@ -60,10 +60,10 @@ SET_DB=true
 
 echo
 echo "All zoxide options are automatically enabled:"
-echo "  • Auto-tracking (--hook)"
-echo "  • Fuzzy search (--fzf)"
-echo "  • Override cd (--cmd cd)"
-echo "  • User-specific database (ZO_DATA)"
+echo "  ✅ Auto-tracking (--hook)"
+echo "  ✅ Fuzzy search (--fzf)"
+echo "  ✅ Override cd (--cmd cd)"
+echo "  ✅ User-specific database (ZO_DATA)"
 echo
 
 # -----------------------------
