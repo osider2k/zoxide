@@ -89,11 +89,16 @@ for home_dir in /home/* /root; do
 
     # fzf-tab
     FZF_TAB_DIR="$zsh_dir/fzf-tab"
-    sudo git clone https://github.com/Aloxaf/fzf-tab "$FZF_TAB_DIR"
+    sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$FZF_TAB_DIR"
 
     # fzf (non-interactive install)
     FZF_DIR="$home_dir/.fzf"
-    sudo git clone --depth 1 https://github.com/junegunn/fzf.git "$FZF_DIR"
+    sudo -u "$user" git clone --depth 1 https://github.com/junegunn/fzf.git "$FZF_DIR"
+
+    # Ensure ownership (fix permission issues)
+    sudo chown -R "$user:$user" "$FZF_DIR"
+
+    # Run non-interactive install as user
     sudo -u "$user" "$FZF_DIR/install" --all --no-bash --no-fish
 
     # Backup existing zshrc
