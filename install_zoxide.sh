@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================
 # Clean System-Wide Installation:
-# tmux + TPM + fzf (from GitHub) + zoxide + fzf-tab
+# tmux + TPM + zoxide + fzf-tab + fzf (from GitHub)
 # Zsh already installed
 # =====================================================
 
@@ -56,7 +56,7 @@ done
 sudo ln -sf /etc/tmux.conf /root/.tmux.conf
 
 # -----------------------------------------------------
-# FZF + ZOXIDE + FZF-TAB
+# FZF-TAB + zoxide
 # -----------------------------------------------------
 echo "=== Setting up zoxide and fzf-tab ==="
 for home_dir in /home/*; do
@@ -69,7 +69,7 @@ for home_dir in /home/*; do
     # Clone fzf-tab
     sudo -u "$user" git clone https://github.com/Aloxaf/fzf-tab "$home_dir/.zsh/fzf-tab"
 
-    # Clone fzf from GitHub
+    # Clone fzf from GitHub (no automatic install yet)
     sudo -u "$user" git clone --depth 1 https://github.com/junegunn/fzf.git "$home_dir/.fzf"
 
     # Write zshrc
@@ -86,9 +86,6 @@ source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
     sudo chown "$user:$user" -R "$zshrc"
-
-    # Run fzf install script interactively
-    sudo -u "$user" bash -c "cd $home_dir/.fzf && ./install"
 done
 
 # Root config
@@ -108,8 +105,23 @@ alias cd="z"
 source ~/.zsh/fzf-tab/fzf-tab.plugin.zsh
 EOF
 
-# Run fzf install for root
-sudo bash -c "cd /root/.fzf && ./install"
+# -----------------------------------------------------
+# FZF INSTALL (manual, interactive)
+# -----------------------------------------------------
+echo ""
+echo "=== FZF interactive install required ==="
+echo "To enable key bindings and shell completion, run:"
+echo ""
+echo "For each user:"
+echo "  ~/.fzf/install"
+echo "Example for current user:"
+echo "  ~/.fzf/install"
+echo ""
+echo "For root:"
+echo "  sudo /root/.fzf/install"
+echo ""
+echo "This step must be done manually to allow y/n prompts."
+echo ""
 
 # -----------------------------------------------------
 echo "=== ✅ Installation complete ==="
