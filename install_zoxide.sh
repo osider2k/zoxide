@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================
 # Full Clean System-Wide Installer:
-# Zsh + Oh My Zsh + Powerlevel10k + tmux + TPM + zoxide + fzf-tab
+# TPM + zoxide + fzf-tab
 # FZF repo is cloned, but interactive install must be run manually
 # =====================================================
 
