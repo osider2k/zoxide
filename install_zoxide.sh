@@ -58,7 +58,26 @@ for home_dir in /home/* /root; do
 done
 
 # -----------------------------------------------------
-# 3) Install zoxide + fzf-tab + clone FZF repo
+# 3) Install zoxide
+# -----------------------------------------------------
+if ! command -v zoxide >/dev/null 2>&1; then
+    echo "Installing zoxide..."
+    if command -v apt >/dev/null 2>&1; then
+        sudo apt install -y zoxide
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y zoxide
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Syu --noconfirm zoxide
+    else
+        curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        sudo mv ~/.local/bin/zoxide /usr/local/bin/
+    fi
+else
+    echo "zoxide already installed."
+fi
+
+# -----------------------------------------------------
+# 4) Install zoxide + fzf-tab + clone FZF repo
 # -----------------------------------------------------
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue
@@ -110,5 +129,4 @@ done
 # -----------------------------------------------------
 echo ""
 echo "=== ✅ Full Clean Installation Complete ==="
-echo "Reload tmux: tmux source ~/.tmux.conf"
 echo "FZF setup must be completed manually per user"
