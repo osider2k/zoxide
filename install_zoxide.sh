@@ -10,6 +10,7 @@ trap 'echo "❌ Error on line $LINENO"; exit 1' ERR
 
 echo "=== Requesting sudo privilege (once) ==="
 sudo -v
+trap 'kill %1 2>/dev/null' EXIT
 while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 
 # -----------------------------------------------------
@@ -115,7 +116,7 @@ EOF
 done
 
 # -----------------------------------------------------
-# 4) Instructions for FZF
+# 5) Instructions for FZF
 # -----------------------------------------------------
 echo ""
 echo "=== FZF setup remaining ==="
