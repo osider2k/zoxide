@@ -20,7 +20,7 @@ echo "=== Removing old configurations ==="
 sudo rm -rf /usr/share/tmux/plugins/tpm /etc/tmux.conf
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue    
-    sudo rm -rf "$home_dir/.tmux.conf" "$home_dir/.tmux" "$home_dir/.fzf"
+    sudo rm -rf "$home_dir/.tmux.conf" "$home_dir/.tmux" "$home_dir/.fzf" "$HOME/.zsh/fzf-tab"
 done
 
 # -----------------------------------------------------
