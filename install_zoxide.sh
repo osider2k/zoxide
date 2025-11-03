@@ -29,30 +29,10 @@ echo "=== Installing required packages ==="
 export DEBIAN_FRONTEND=noninteractive
 sudo apt update -y
 
-# Don't need zsh install together
 sudo apt install -y git tmux ca-certificates curl
 
 # -----------------------------------------------------
-# 2) Install Oh My Zsh system-wide
-# -----------------------------------------------------
-ZSH_DIR="/usr/share/oh-my-zsh"
-echo "Installing Oh My Zsh..."
-sudo git clone --depth=1 https://github.com/ohmyzsh/ohmyzsh.git "$ZSH_DIR"
-
-# Skeleton .zshrc for new users
-sudo cp "$ZSH_DIR/templates/zshrc.zsh-template" /etc/skel/.zshrc
-sudo sed -i "s|ZSH=.*|ZSH=$ZSH_DIR|" /etc/skel/.zshrc
-
-# -----------------------------------------------------
-# 3) Install Powerlevel10k
-# -----------------------------------------------------
-P10K_DIR="$ZSH_DIR/custom/themes/powerlevel10k"
-echo "Installing Powerlevel10k..."
-sudo git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$P10K_DIR"
-sudo sed -i 's|^ZSH_THEME=.*|ZSH_THEME="powerlevel10k/powerlevel10k"|' /etc/skel/.zshrc
-
-# -----------------------------------------------------
-# 4) Install tmux + TPM
+# 2) Install tmux + TPM
 # -----------------------------------------------------
 TPM_DIR="/usr/share/tmux/plugins/tpm"
 echo "Installing TPM..."
@@ -78,7 +58,7 @@ for home_dir in /home/* /root; do
 done
 
 # -----------------------------------------------------
-# 5) Install zoxide + fzf-tab + clone FZF repo
+# 3) Install zoxide + fzf-tab + clone FZF repo
 # -----------------------------------------------------
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue
@@ -116,19 +96,7 @@ EOF
 done
 
 # -----------------------------------------------------
-# 6) Set Zsh as default shell for all users
-# -----------------------------------------------------
-ZSH_BIN="$(command -v zsh)"
-if ! grep -q "$ZSH_BIN" /etc/shells; then
-    echo "$ZSH_BIN" | sudo tee -a /etc/shells >/dev/null
-fi
-for uhome in /home/* /root; do
-    [ -d "$uhome" ] || continue
-    sudo chsh -s "$ZSH_BIN" "$(basename "$uhome")"
-done
-
-# -----------------------------------------------------
-# 7) Instructions for FZF
+# 4) Instructions for FZF
 # -----------------------------------------------------
 echo ""
 echo "=== FZF setup remaining ==="
@@ -142,7 +110,5 @@ done
 # -----------------------------------------------------
 echo ""
 echo "=== ✅ Full Clean Installation Complete ==="
-echo "Reload Zsh: source ~/.zshrc"
 echo "Reload tmux: tmux source ~/.tmux.conf"
-echo "Open tmux and press Ctrl+b then I to install TPM plugins"
 echo "FZF setup must be completed manually per user"
