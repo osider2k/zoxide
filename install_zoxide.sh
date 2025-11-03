@@ -17,7 +17,7 @@ while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 # 0) Remove all old configurations
 # -----------------------------------------------------
 echo "=== Removing old configurations ==="
-sudo rm -rf /usr/share/oh-my-zsh /usr/share/tmux/plugins/tpm /etc/tmux.conf
+sudo rm -rf /usr/share/tmux/plugins/tpm /etc/tmux.conf
 for home_dir in /home/* /root; do
     [ -d "$home_dir" ] || continue    
     sudo rm -rf "$home_dir/.tmux.conf" "$home_dir/.tmux" "$home_dir/.fzf"
