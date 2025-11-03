@@ -18,8 +18,7 @@ while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
 echo "=== Removing old configurations ==="
 sudo rm -rf /usr/share/oh-my-zsh /usr/share/tmux/plugins/tpm /etc/tmux.conf
 for home_dir in /home/* /root; do
-    [ -d "$home_dir" ] || continue
-    sudo rm -rf "$home_dir/.oh-my-zsh" "$home_dir/.zsh" "$home_dir/.zshrc" "$home_dir/.p10k.zsh"
+    [ -d "$home_dir" ] || continue    
     sudo rm -rf "$home_dir/.tmux.conf" "$home_dir/.tmux" "$home_dir/.fzf"
 done
 
@@ -29,7 +28,9 @@ done
 echo "=== Installing required packages ==="
 export DEBIAN_FRONTEND=noninteractive
 sudo apt update -y
-sudo apt install -y git zsh tmux ca-certificates curl
+
+# Don't need zsh install together
+sudo apt install -y git tmux ca-certificates curl
 
 # -----------------------------------------------------
 # 2) Install Oh My Zsh system-wide
